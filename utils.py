@@ -1,4 +1,6 @@
 import pandas as pd
+import csv
+from odtime_generate.coor_transform import wgs84_to_gcj02
 
 def getuk_fcsv(file):
     "get uk from csv"
@@ -11,9 +13,13 @@ def getuk_fl(uk_list):
     for each in uk_list:
         yield each
 
+
 def generate_odxy(file):
     #获得od上三角列表
     df = pd.read_excel(file).iloc[:, [-6,-2, -1]]
+    df['Lng_hx'] = df.apply(lambda row: wgs84_to_gcj02(row['INSIDE_X'], row['INSIDE_Y'])[0], axis=1) #坐标转换
+    df['Lat_hx'] = df.apply(lambda row: wgs84_to_gcj02(row['INSIDE_X'], row['INSIDE_Y'])[1], axis=1)
+    print(df)
     df_c = df.copy(deep=True)
     i = 0
     for each1 in df.iterrows():
@@ -22,15 +28,29 @@ def generate_odxy(file):
         if i == len(df):
             break
         for each2 in df_c.iterrows():
-            yield each1[1][1],each1[1][2],each2[1][1],each2[1][2],each1[1][0],each2[1][0]#the former 4 is the coordinates,
+            yield each1[1][3],each1[1][4],each2[1][3],each2[1][4],each1[1][0],each2[1][0]#the former 4 is the coordinates,
             #the last two is the value of index"[-6]",which is the t value.
 
-def wrongodlist():
-    pass
+class od():
+
+    '''
+    od表b数据结构
+    '''
+    def __init__(self, *args):
+        self.output_dict = {}
+        for each in args:
+            args[each] = []
+    def add(self,**kwargs):
+        for key,value in kwargs.items():
+            self.output_dict[key].append(value)
+    def to_csv(self,file):
+        pd.DataFrame(self.output_dict)
+        return self.df.to_csv(file)
+
+
+
 
 if __name__ == "__main__":
-    a = ['d70701297678984a952784242d36d287', '28967d62c78015ce18d2f935c29f9948']
-    it = getuk_fl(a)
-    for each in range(5):
-            # print(iter(getuk_fl(['d70701297678984a952784242d36d287', '28967d62c78015ce18d2f935c29f9948'])).next())
-            print(next(it))
+    file = '/Users/pro/Desktop/深圳1000网格的副本 2.xls'
+    for each in generate_odxy(file):
+        print(each)
