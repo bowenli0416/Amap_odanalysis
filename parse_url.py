@@ -4,7 +4,7 @@ import pandas as pd
 import requests
 import datetime
 import importlib, sys
-from retrying import  retry
+# from retrying import  retry
 import numpy as np
 from odtime_generate import craw_exception as ce
 from odtime_generate import utils as ut
@@ -14,18 +14,20 @@ from odtime_generate import utils as ut
 
 class parse_url():
 
-    def __init__(self,file,ukl,url = 'https://restapi.amap.com/v3/direction/transit/integrated?origin={0},{1}'
+    def __init__(self,file,ukl,path,url = 'https://restapi.amap.com/v3/direction/transit/integrated?origin={0},{1}'
                                          '&destination={2},{3}&city=0755&output=json&key={4}&strategy=0&nightflag=0'):
         '''
 
         :param file: file from ArcGIS
         :param userkey:
         :param url:
+        :param path:存放结果csv文件的文件夹
         '''
         self.file = file
         self.url = url
         self.ukl = ukl
-        self.odlist1 = ut.od('ox', 'oy', 'dx', 'dy', 'onum', 'dnumy', 'type')
+        self.path = path
+        self.odwrongdic = ut.od('ox', 'oy', 'dx', 'dy', 'onum', 'dnum', 'type')
 
     def xy_generator(self):
         table = pd.read_excel(self.file).iloc[:, [-6, -2, -1]]
@@ -67,14 +69,12 @@ class parse_url():
 
 
     def parse_model(self):
-        # user_key = next(self.ukl)
-        # for od in self._generate_odxy():
-        odlist1 = ut.od('ox','oy','dx','dy','onum','dnumy','type')
         gen_od = 1
         gen_uk = 1
         time_mark = 0; error_breakmark = 0
         odg = ut.generate_odxy(self.file)
         ukg = self.ukl
+        odg = ut.set_generator(self.path,odg)
         # run_time = 0
         while True:
                 try:
@@ -84,29 +84,32 @@ class parse_url():
                     if gen_uk == 1:
                         user_key = next(ukg)
                     url = self.url.format(od[0],od[1],od[2],od[3],user_key)
-                    json = self._get_json(url)#get the json
-                    error_breakmark = 0 # if _get_json then set 0
-                    ce.analyse_statcode(json)
+                    json = self._get_json(url)#request 模块获得json
+                    error_breakmark = 0 # 只要顺利执行一次就将其清零
+                    ce.analyse_statcode(json)# 分析status code
                 except StopIteration as e:
-                    print('the output is done')
+                    print(e)
+                    print('输出结束')
                     break
                 except requests.exceptions.RequestException:
                     gen_uk = 0; gen_od = 0
                     time_mark += 1; error_breakmark += 1
-                    # print('timemark is{0},errorbreakmark is{1}'.format(time_mark,error_breakmark))
-                    if error_breakmark == 1000: #很长时间都没有得到json 则退出
-                        print('url error')
+                    print('timemark is{0},errorbreakmark is{1}'.format(time_mark,error_breakmark))
+                    if error_breakmark == 100: #很长时间都没有得到json 则退出
+                        print('url 错误，请检查网络连接')
                         break
                     if time_mark == 5: #多次循环后仍然报错，进行下次循环
                         gen_uk = 0; gen_od = 1
-                        ut.wrongodlist();t.sleep(60)
+                        self.odwrongdic.add(ox=od[0],oy=od[1],dx=od[2],dy=od[3],onum=od[4],dnum=od[5],type='re')
+                        t.sleep(61)
                         time_mark = 0
                         continue
-                except ce.InvaluserkeyException:
-                    gen_uk = 1; gen_od = 0
+                    continue
+                except ce.InvaluserkeyException as e:
+                    gen_uk = 1; gen_od = 0; print(e)
                     continue #  the func continue to run
-                except ce.DailyoverlimException:
-                    gen_uk = 1;gen_od = 0
+                except ce.DailyoverlimException as e:
+                    gen_uk = 1; gen_od = 0; print(e)
                     continue
                 except ce.TooFreqException as e:
                     t.sleep(60)
@@ -114,7 +117,21 @@ class parse_url():
                     continue
                 except ce.MissReqParaException as e:
                     #代表坐标有误跨越了地区，所以缺失参数
-                    self.odlist1.add(ox=od[0],oy=od[1],dx=od[2],dy=od[3],onum=od[4],dnum=od[5],type='mp')
+                    self.odwrongdic.add(ox=od[0],oy=od[1],dx=od[2],dy=od[3],onum=od[4],dnum=od[5],type='mp')
+                    continue
+                except ce.OtherInfoCodeException as e:
+                    gen_uk = 0;gen_od = 0;time_mark += 1;error_breakmark += 1
+                    # print('timemark is{0},errorbreakmark is{1}'.format(time_mark,error_breakmark))
+                    if error_breakmark == 100:  # 很长时间都没有得到json 则退出
+                        print('url 错误，请检查网络连接')
+                        break
+                    if time_mark == 5:  # 多次循环后仍然报错，进行下次循环
+                        gen_uk = 0;
+                        gen_od = 1
+                        self.odwrongdic.add(ox=od[0], oy=od[1], dx=od[2], dy=od[3], onum=od[4], dnum=od[5], type='re')
+                        t.sleep(5)
+                        time_mark = 0
+                        continue
                     continue
                 else: #if no exception has been caught
                     try:
@@ -128,7 +145,6 @@ class parse_url():
                         #unkown excep
                         print(json)
                         break
-                # yield dict(t='{0}{1}'.format(od[4],od[5]),time=min_dur)
                 yield od[4], od[5], min_dur
 
 
