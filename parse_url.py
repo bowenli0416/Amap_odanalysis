@@ -9,12 +9,9 @@ import numpy as np
 from odtime_generate import craw_exception as ce
 from odtime_generate import utils as ut
 
-#TODO sleepfunc  retryfunc are needed
-
-
 class parse_url():
 
-    def __init__(self,file,ukl,path,url = 'https://restapi.amap.com/v3/direction/transit/integrated?origin={0},{1}'
+    def __init__(self,file,ukl,path,onum,dnum,url = 'https://restapi.amap.com/v3/direction/transit/integrated?origin={0},{1}'
                                          '&destination={2},{3}&city=0755&output=json&key={4}&strategy=0&nightflag=0'):
         '''
 
@@ -27,6 +24,8 @@ class parse_url():
         self.url = url
         self.ukl = ukl
         self.path = path
+        self.onum = onum
+        self.dnum = dnum
         self.odwrongdic = ut.od('ox', 'oy', 'dx', 'dy', 'onum', 'dnum', 'type')
 
     def xy_generator(self):
@@ -67,15 +66,15 @@ class parse_url():
             # else:
             #     raise ce.RequestatcodeException('REQUEST_STATUS_CODE_200_FAILED_ERROR')
 
-
+    # @ut.count_func
     def parse_model(self):
         gen_od = 1
         gen_uk = 1
         time_mark = 0; error_breakmark = 0
         odg = ut.generate_odxy(self.file)
         ukg = self.ukl
-        odg = ut.set_generator(self.path,odg)
-        # run_time = 0
+        odg = ut.set_generator1(self.onum,self.dnum,odg)
+        run_time = 0
         while True:
                 try:
                     if gen_od == 1:
@@ -85,7 +84,6 @@ class parse_url():
                         user_key = next(ukg)
                     url = self.url.format(od[0],od[1],od[2],od[3],user_key)
                     json = self._get_json(url)#request 模块获得json
-                    error_breakmark = 0 # 只要顺利执行一次就将其清零
                     ce.analyse_statcode(json)# 分析status code
                 except StopIteration as e:
                     print(e)
@@ -93,17 +91,13 @@ class parse_url():
                     break
                 except requests.exceptions.RequestException:
                     gen_uk = 0; gen_od = 0
-                    time_mark += 1; error_breakmark += 1
-                    print('timemark is{0},errorbreakmark is{1}'.format(time_mark,error_breakmark))
-                    if error_breakmark == 100: #很长时间都没有得到json 则退出
-                        print('url 错误，请检查网络连接')
-                        break
-                    if time_mark == 5: #多次循环后仍然报错，进行下次循环
-                        gen_uk = 0; gen_od = 1
-                        self.odwrongdic.add(ox=od[0],oy=od[1],dx=od[2],dy=od[3],onum=od[4],dnum=od[5],type='re')
-                        t.sleep(61)
-                        time_mark = 0
-                        continue
+                    time_mark += 1
+                    print('网络链接出错，重试中...')
+                    t.sleep(61)
+                    if time_mark == 5: #多次循环后仍然报错，退出
+                        if run_time == 0:
+                            raise ce.CheckconnException("请检查连接后开始执行程序")
+                        break # 多次循环后仍然报错直接退出
                     continue
                 except ce.InvaluserkeyException as e:
                     gen_uk = 1; gen_od = 0; print(e)
@@ -112,38 +106,35 @@ class parse_url():
                     gen_uk = 1; gen_od = 0; print(e)
                     continue
                 except ce.TooFreqException as e:
-                    t.sleep(60)
+                    t.sleep(61)
                     gen_uk = 0; gen_od = 0
                     continue
                 except ce.MissReqParaException as e:
                     #代表坐标有误跨越了地区，所以缺失参数
                     self.odwrongdic.add(ox=od[0],oy=od[1],dx=od[2],dy=od[3],onum=od[4],dnum=od[5],type='mp')
+                    gen_od = 1;gen_uk = 0
+                    yield od[4], od[5], -1
                     continue
                 except ce.OtherInfoCodeException as e:
-                    gen_uk = 0;gen_od = 0;time_mark += 1;error_breakmark += 1
-                    # print('timemark is{0},errorbreakmark is{1}'.format(time_mark,error_breakmark))
-                    if error_breakmark == 100:  # 很长时间都没有得到json 则退出
-                        print('url 错误，请检查网络连接')
-                        break
+                    gen_uk = 0;gen_od = 0
+                    time_mark += 1
+                    t.sleep(20);print('出现错误,重试中');print(e)
                     if time_mark == 5:  # 多次循环后仍然报错，进行下次循环
-                        gen_uk = 0;
-                        gen_od = 1
-                        self.odwrongdic.add(ox=od[0], oy=od[1], dx=od[2], dy=od[3], onum=od[4], dnum=od[5], type='re')
-                        t.sleep(5)
-                        time_mark = 0
-                        continue
+                        print(e)#打印错误
+                        break
                     continue
                 else: #if no exception has been caught
                     try:
                         gen_od = 1; gen_uk = 0
                         min_dur = self._parse_json(json)
-                        # run_time+=1
+                        if run_time % 100 ==0:
+                            print('执行了：{0}次'.format(run_time))
+                        run_time+=1
                     except ce.NorouteException as e:
                         min_dur = np.inf
-                        print(e)
-                    except Exception as e:
-                        #unkown excep
+                    except Exception as e:  #unkown excep
                         print(json)
+                        print("未知错误："+e)
                         break
                 yield od[4], od[5], min_dur
 

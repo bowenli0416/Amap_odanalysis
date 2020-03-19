@@ -23,8 +23,14 @@ class OtherInfoCodeException(Exception):
         self.msg1 = msg1
 
     def __str__(self):
-        return self.msg + ':' + self.msg1
+        return self.msg + self.msg1
 
+class CheckconnException(Exception):
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __str__(self):
+        return self.msg
 
 class MissReqParaException(Exception):
     def __init__(self, msg):
@@ -69,3 +75,10 @@ class NorouteException(Exception):
 #
 #     def __str__(self):
 #         return self.msg
+
+if __name__ == "__main__":
+    json = {'status':'0','infocode':'100089'}
+    try:
+        analyse_statcode(json)
+    except OtherInfoCodeException as e:
+        print(e)
