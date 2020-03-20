@@ -1,31 +1,32 @@
 from odtime_generate.parse_url import *
 from odtime_generate import utils as ut
 import pandas as pd
+import numpy as np
 
-def run(file,ukl):
-
-
+def run_test(file,ukl):
     PU = parse_url(file,ukl)
     odgen = PU.parse_model()
     for each in odgen:
         print(each)
 
-def output(file,ukl):
-    output_dic = dict(onum=[],dnum=[],time=[])
-    PU = parse_url(file, ukl)
-    odgen = PU.parse_model()
+def run(file, ukl, path,path1):
+    odwrongfilenum = ut.check_csv1(path1)[0]
+    odtable, sonum, sdnum = ut.genrate_odmatrix(file,path)
+    fonum, fdnum = [0], [0]
+    pu = parse_url(file, ukl, path,sonum,sdnum)
+    odgen = pu.parse_model()
     for each in odgen:
-        output_dic['onum'].append(each[0])
-        output_dic['dnum'].append(each[1])
-        output_dic['time'].append(each[2])
-    lasto = output_dic['onum'][-1]
-    lastd = output_dic['dnum'][-1]
-    df = pd.DataFrame(output_dic)
-
-    return df.to_csv(r'./{0}_{1}.csv'.format(lasto,lastd))
+        odtable[int(each[0])][int(each[1])] = each[2]
+        fonum[0] = each[0]
+        fdnum[0] = each[1]
+    ut.del_files(path)#存在bug
+    np.save(path + r'/{0}_{1}.npy'.format(int(fonum[0]),int(fdnum[0])),odtable)
+    pu.odwrongdic.to_csv(path1 + '/wrongod{0}.csv'.format(odwrongfilenum))
 
 if __name__ == "__main__":
-    ukl = ['d70701297678984a952784242d36d287', '28967d62c78015ce18d2f935c29f9948']
-    file = '/Users/pro/Desktop/深圳1000网格1.xls'
+    ukl = ['d70701297678984a952784242d36d287', 'a54dedbe29cfc92eff676412907f7f39']
+    file = './datdemo/深圳1000网格.xls'
+    path = r'./csvfile'
+    path1 = r'./wrongodfile'
     ituk = ut.getuk_fl(ukl)
-    output(file,ituk)
+    run(file,ituk,path,path1)

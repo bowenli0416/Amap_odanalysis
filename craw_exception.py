@@ -13,6 +13,24 @@ def analyse_statcode(json):
             raise TooFreqException('ACCESS_TOO_FREQUENT_ERROR')
         if info_code == '20001':
             raise MissReqParaException('MISSING_REQUIRED_PARAMS')
+        else:
+            #对于一些未知的错误
+            raise OtherInfoCodeException("INFOCODE_ERROR:",info_code)
+
+class OtherInfoCodeException(Exception):
+    def __init__(self, msg,msg1):
+        self.msg = msg
+        self.msg1 = msg1
+
+    def __str__(self):
+        return self.msg + self.msg1
+
+class CheckconnException(Exception):
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __str__(self):
+        return self.msg
 
 class MissReqParaException(Exception):
     def __init__(self, msg):
@@ -51,9 +69,10 @@ class NorouteException(Exception):
     def __str__(self):
         return self.msg
 
-# class RequestatcodeException(Exception):
-#     def __init__(self, msg):
-#         self.msg = msg
-#
-#     def __str__(self):
-#         return self.msg
+
+if __name__ == "__main__":
+    json = {'status':'0','infocode':'100089'}
+    try:
+        analyse_statcode(json)
+    except OtherInfoCodeException as e:
+        print(e)
